@@ -1,0 +1,487 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#1f6feb">
+  <title>Recitation Scanner</title>
+  <link rel="manifest" href="manifest.json">
+  <script src="https://unpkg.com/html5-qrcode" type="text/javascript"></script>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background-color: #f4f6f9;
+      text-align: center;
+    }
+
+    .container {
+      max-width: 420px;
+      margin: 0 auto;
+      background: white;
+      padding: 20px;
+      border-radius: 10px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.1);
+    }
+
+    input {
+      width: 100%;
+      padding: 10px;
+      margin: 10px 0;
+      box-sizing: border-box;
+      border: 1px solid #ccc;
+      border-radius: 5px;
+      font-size: 16px;
+    }
+
+    button {
+      width: 100%;
+      padding: 12px;
+      margin-top: 10px;
+      border: 0;
+      border-radius: 5px;
+      background: #1f6feb;
+      color: white;
+      font-size: 16px;
+      font-weight: bold;
+      cursor: pointer;
+    }
+
+    button:disabled {
+      background: #8daee8;
+      cursor: not-allowed;
+    }
+
+    .manual-row {
+      display: flex;
+      gap: 8px;
+      margin-top: 6px;
+    }
+
+    .manual-row input {
+      margin: 0;
+    }
+
+    .manual-row button {
+      width: 120px;
+      margin-top: 0;
+      padding-left: 10px;
+      padding-right: 10px;
+      white-space: nowrap;
+    }
+
+    .quick-points {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin: 0 0 10px;
+    }
+
+    .quick-points button {
+      margin-top: 0;
+      padding: 10px 6px;
+      background: #eef4ff;
+      color: #1f4e96;
+      border: 1px solid #b8cdf5;
+    }
+
+    .quick-points button.active {
+      background: #1f6feb;
+      color: white;
+      border-color: #1f6feb;
+    }
+
+    .recent-panel {
+      margin-top: 16px;
+      text-align: left;
+      border-top: 1px solid #e5e7eb;
+      padding-top: 12px;
+      display: none;
+    }
+
+    .recent-panel h3 {
+      margin: 0 0 8px;
+      color: #2c3e50;
+      font-size: 15px;
+    }
+
+    .recent-list {
+      display: grid;
+      gap: 6px;
+    }
+
+    .recent-item {
+      background: #f8fafc;
+      border: 1px solid #e5e7eb;
+      border-radius: 6px;
+      padding: 8px 10px;
+      color: #334155;
+      font-size: 14px;
+      line-height: 1.35;
+      white-space: pre-line;
+    }
+
+    h2 {
+      color: #2c3e50;
+      margin-bottom: 5px;
+    }
+
+    #reader {
+      width: 100%;
+      border-radius: 8px;
+      overflow: hidden;
+      margin-top: 15px;
+    }
+
+    #result {
+      margin-top: 20px;
+      padding: 15px;
+      border-radius: 5px;
+      font-weight: bold;
+      font-size: 17px;
+      display: none;
+    }
+
+    .success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+    }
+
+    .error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+    }
+
+    .scanning {
+      background-color: #e2e3e5;
+      color: #383d41;
+      border: 1px solid #d6d8db;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h2>Recitation Scanner</h2>
+    <p style="color: #7f8c8d; font-size: 14px; margin-top: 0;">Sir JR's Automated System</p>
+
+    <input type="text" id="activity" value="Recitation" placeholder="Activity Name">
+    <input type="number" id="points" value="1" min="1" placeholder="Points to award">
+    <div class="quick-points">
+      <button class="quick-point active" type="button" data-points="1">+1</button>
+      <button class="quick-point" type="button" data-points="2">+2</button>
+      <button class="quick-point" type="button" data-points="3">+3</button>
+      <button class="quick-point" type="button" data-points="5">+5</button>
+    </div>
+    <div class="manual-row">
+      <input type="text" id="manualStudentId" placeholder="Type Student ID">
+      <button id="manualButton" type="button">Record</button>
+    </div>
+
+    <button id="startButton" type="button">Start Camera Scanner</button>
+    <div id="reader"></div>
+    <div id="result"></div>
+    <div id="recentPanel" class="recent-panel">
+      <h3>Recent Scans</h3>
+      <div id="recentList" class="recent-list"></div>
+    </div>
+  </div>
+
+  <script>
+    const WEB_APP_URL = "https://script.google.com/macros/s/AKfycbw_p9PbNEfBxTCw2LamJ8aBxI9Y7-QUMCeNUAhrU3h0qu3CoUAqWGug3I4jORIzSY0U/exec";
+
+    const startButton = document.getElementById("startButton");
+    const manualButton = document.getElementById("manualButton");
+    const manualStudentId = document.getElementById("manualStudentId");
+    const pointsInput = document.getElementById("points");
+    const resultDiv = document.getElementById("result");
+    const recentPanel = document.getElementById("recentPanel");
+    const recentList = document.getElementById("recentList");
+    const quickPointButtons = Array.from(document.querySelectorAll(".quick-point"));
+    const scanner = new Html5Qrcode("reader", {
+      formatsToSupport: [Html5QrcodeSupportedFormats.QR_CODE],
+      verbose: false
+    });
+
+    let isProcessing = false;
+    let scannerStarted = false;
+    let audioContext = null;
+    const recentScans = [];
+
+    function vibrate(pattern) {
+      if ("vibrate" in navigator) {
+        navigator.vibrate(pattern);
+      }
+    }
+
+    function unlockFeedback() {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+
+      if (!AudioContext) {
+        return;
+      }
+
+      if (!audioContext) {
+        audioContext = new AudioContext();
+      }
+
+      if (audioContext.state === "suspended") {
+        audioContext.resume();
+      }
+    }
+
+    function beep(frequency, duration, volume) {
+      unlockFeedback();
+
+      if (!audioContext || audioContext.state !== "running") {
+        return;
+      }
+
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+
+      oscillator.type = "sine";
+      oscillator.frequency.value = frequency;
+      gain.gain.value = volume;
+
+      oscillator.connect(gain);
+      gain.connect(audioContext.destination);
+
+      oscillator.start();
+      setTimeout(() => {
+        oscillator.stop();
+      }, duration);
+    }
+
+    function playSuccessFeedback() {
+      vibrate(80);
+      beep(880, 90, 0.08);
+    }
+
+    function playErrorFeedback() {
+      vibrate([80, 60, 140]);
+      beep(220, 160, 0.1);
+    }
+
+    function showResult(type, message) {
+      resultDiv.style.display = "block";
+      resultDiv.className = type;
+      resultDiv.innerText = message;
+    }
+
+    function addRecentScan(message) {
+      recentScans.unshift(message);
+
+      if (recentScans.length > 5) {
+        recentScans.pop();
+      }
+
+      recentPanel.style.display = "block";
+      recentList.innerHTML = "";
+
+      recentScans.forEach((scan) => {
+        const item = document.createElement("div");
+        item.className = "recent-item";
+        item.innerText = scan;
+        recentList.appendChild(item);
+      });
+    }
+
+    function updateQuickPointButtons() {
+      const selectedPoints = pointsInput.value;
+
+      quickPointButtons.forEach((button) => {
+        button.classList.toggle("active", button.dataset.points === selectedPoints);
+      });
+    }
+
+    function releaseProcessing() {
+      isProcessing = false;
+      manualButton.disabled = false;
+
+      if (scannerStarted) {
+        scanner.resume();
+      }
+    }
+
+    function callBackend(params) {
+      return new Promise((resolve, reject) => {
+        const callbackName = "scannerCallback_" + Date.now() + "_" + Math.floor(Math.random() * 100000);
+        const script = document.createElement("script");
+        const query = new URLSearchParams({
+          callback: callbackName,
+          qrText: params.qrText,
+          activity: params.activity,
+          points: String(params.points)
+        });
+
+        const timeoutId = setTimeout(() => {
+          cleanup();
+          reject(new Error("Backend request timed out."));
+        }, 10000);
+
+        function cleanup() {
+          clearTimeout(timeoutId);
+          delete window[callbackName];
+          script.remove();
+        }
+
+        window[callbackName] = (data) => {
+          cleanup();
+          resolve(data);
+        };
+
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("Could not reach Apps Script backend."));
+        };
+
+        script.src = WEB_APP_URL + "?" + query.toString();
+        document.body.appendChild(script);
+      });
+    }
+
+    async function sendScan(decodedText) {
+      const activity = document.getElementById("activity").value.trim();
+      const points = Number(document.getElementById("points").value);
+      const studentId = String(decodedText || "").trim();
+
+      if (!studentId) {
+        showResult("error", "Please enter or scan a Student ID.");
+        releaseProcessing();
+        return;
+      }
+
+      if (!activity) {
+        showResult("error", "Please enter an activity name.");
+        releaseProcessing();
+        return;
+      }
+
+      if (!Number.isFinite(points) || points <= 0) {
+        showResult("error", "Please enter valid points.");
+        releaseProcessing();
+        return;
+      }
+
+      showResult("scanning", "Processing Student ID...");
+
+      try {
+        const data = await callBackend({
+          qrText: studentId,
+          activity,
+          points
+        });
+        showResult(data.status === "success" ? "success" : "error", data.message);
+
+        if (data.status === "success") {
+          playSuccessFeedback();
+          addRecentScan(data.message);
+        } else {
+          playErrorFeedback();
+        }
+
+        setTimeout(() => {
+          releaseProcessing();
+        }, 1200);
+      } catch (error) {
+        showResult("error", "System Error: " + error.message);
+        playErrorFeedback();
+        releaseProcessing();
+      }
+    }
+
+    function recordManualStudentId() {
+      if (isProcessing) return;
+      unlockFeedback();
+
+      if (WEB_APP_URL.includes("PASTE_YOUR")) {
+        showResult("error", "Set WEB_APP_URL first.");
+        return;
+      }
+
+      const studentId = manualStudentId.value.trim();
+
+      if (!studentId) {
+        showResult("error", "Please type a Student ID.");
+        manualStudentId.focus();
+        return;
+      }
+
+      isProcessing = true;
+      manualButton.disabled = true;
+
+      if (scannerStarted) {
+        scanner.pause(true);
+      }
+
+      sendScan(studentId);
+      manualStudentId.value = "";
+    }
+
+    async function startScanner() {
+      if (scannerStarted) return;
+      unlockFeedback();
+
+      if (WEB_APP_URL.includes("PASTE_YOUR")) {
+        showResult("error", "Set WEB_APP_URL first.");
+        return;
+      }
+
+      startButton.disabled = true;
+      showResult("scanning", "Starting camera...");
+
+      try {
+        await scanner.start(
+          { facingMode: "environment" },
+          {
+            fps: 15,
+            qrbox: { width: 220, height: 220 },
+            aspectRatio: 1,
+            disableFlip: true
+          },
+          (decodedText) => {
+            if (isProcessing) return;
+            isProcessing = true;
+            scanner.pause(true);
+            sendScan(decodedText);
+          }
+        );
+
+        scannerStarted = true;
+        showResult("success", "Camera scanner ready.");
+      } catch (error) {
+        startButton.disabled = false;
+        showResult("error", "Camera Error: " + error.message);
+      }
+    }
+
+    startButton.addEventListener("click", startScanner);
+    manualButton.addEventListener("click", recordManualStudentId);
+    pointsInput.addEventListener("input", updateQuickPointButtons);
+    quickPointButtons.forEach((button) => {
+      button.addEventListener("click", () => {
+        unlockFeedback();
+        pointsInput.value = button.dataset.points;
+        updateQuickPointButtons();
+      });
+    });
+    manualStudentId.addEventListener("keydown", (event) => {
+      if (event.key === "Enter") {
+        recordManualStudentId();
+      }
+    });
+
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.getRegistrations().then((registrations) => {
+          registrations.forEach((registration) => {
+            registration.unregister();
+          });
+        });
+      });
+    }
+  </script>
+</body>
+</html>
